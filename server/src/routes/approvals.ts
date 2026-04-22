@@ -18,6 +18,10 @@ import {
 } from "../services/index.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
 import { redactEventPayload } from "../redaction.js";
+import {
+  buildApprovalNotification,
+  notifyTelegram,
+} from "../services/telegram-notifications.js";
 
 function redactApprovalPayload<T extends { payload: Record<string, unknown> }>(approval: T): T {
   return {
@@ -111,6 +115,14 @@ export function approvalRoutes(db: Db) {
       entityId: approval.id,
       details: { type: approval.type, issueIds: uniqueIssueIds },
     });
+
+    void notifyTelegram(
+      buildApprovalNotification({
+        approvalId: approval.id,
+        approvalType: approval.type,
+        companyId,
+      }),
+    );
 
     res.status(201).json(redactApprovalPayload(approval));
   });
