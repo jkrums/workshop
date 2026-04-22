@@ -22,8 +22,10 @@ if [ "$(id -g node)" -ne "$PGID" ]; then
     changed=1
 fi
 
-if [ "$changed" = "1" ]; then
-    chown -R node:node /paperclip
-fi
+# Always ensure the /paperclip volume is writable by the node user.
+# Fly volumes mount as root-owned regardless of PUID/PGID, so the
+# conditional-on-remap chown above isn't sufficient.
+chown node:node /paperclip
+find /paperclip -mindepth 1 -maxdepth 1 ! -user node -exec chown -R node:node {} +
 
 exec gosu node "$@"
