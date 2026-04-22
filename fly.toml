@@ -22,6 +22,9 @@ primary_region = "iad"
   PAPERCLIP_STORAGE_S3_FORCE_PATH_STYLE = "true"
   PAPERCLIP_AUTH_PUBLIC_BASE_URL = "https://workshop-jkrums.fly.dev"
   PAPERCLIP_ALLOWED_HOSTNAMES = "workshop-jkrums.fly.dev"
+  # Sign-up disabled after the first admin (Janis) registered on 2026-04-22.
+  # New users must be invited from inside the UI.
+  PAPERCLIP_AUTH_DISABLE_SIGN_UP = "true"
 
 # Persists the instance directory — secrets master key, any plugin-local
 # state — across deploys and restarts. DB is external (Fly Postgres) and
