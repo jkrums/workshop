@@ -1,0 +1,56 @@
+app = "workshop-jkrums"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Non-secret runtime config. Secrets (DATABASE_URL, BETTER_AUTH_SECRET,
+# PAPERCLIP_AGENT_JWT_SECRET, PAPERCLIP_SECRETS_MASTER_KEY, AWS_*) are
+# managed via `flyctl secrets`.
+[env]
+  HOST = "0.0.0.0"
+  PORT = "3100"
+  SERVE_UI = "true"
+  PAPERCLIP_HOME = "/paperclip"
+  PAPERCLIP_INSTANCE_ID = "default"
+  PAPERCLIP_DEPLOYMENT_MODE = "authenticated"
+  PAPERCLIP_DEPLOYMENT_EXPOSURE = "public"
+  PAPERCLIP_STORAGE_PROVIDER = "s3"
+  PAPERCLIP_STORAGE_S3_BUCKET = "workshop-jkrums-blobs"
+  PAPERCLIP_STORAGE_S3_ENDPOINT = "https://fly.storage.tigris.dev"
+  PAPERCLIP_STORAGE_S3_REGION = "auto"
+  PAPERCLIP_STORAGE_S3_FORCE_PATH_STYLE = "true"
+  PAPERCLIP_AUTH_PUBLIC_BASE_URL = "https://workshop-jkrums.fly.dev"
+  PAPERCLIP_ALLOWED_HOSTNAMES = "workshop-jkrums.fly.dev"
+  # Sign-up disabled after the first admin (Janis) registered on 2026-04-22.
+  # New users must be invited from inside the UI.
+  PAPERCLIP_AUTH_DISABLE_SIGN_UP = "true"
+
+# Persists the instance directory — secrets master key, any plugin-local
+# state — across deploys and restarts. DB is external (Fly Postgres) and
+# blobs are external (Tigris), so 1 GB is plenty.
+[[mounts]]
+  source = "workshop_state"
+  destination = "/paperclip"
+  initial_size = "1"
+
+[http_service]
+  internal_port = 3100
+  force_https = true
+  # Stay always-on: Workshop routines (daily briefing, etc.) run in-process
+  # and need the machine up to fire. Cost: ~$4/mo.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "15s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpus = 1
