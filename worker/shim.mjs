@@ -73,6 +73,22 @@ async function main() {
 
   console.log(`[shim] workshop-worker starting run=${runId} model=${model ?? "(default)"}`);
 
+  // Wire the bundled Paperclip MCP stdio server into this invocation.
+  // Env for the child MCP is inherited from process.env (PAPERCLIP_API_URL
+  // + PAPERCLIP_API_KEY already set by the adapter) plus PAPERCLIP_RUN_ID
+  // so mutations carry the run id header.
+  const mcpServerPath =
+    process.env.PAPERCLIP_MCP_SERVER_PATH ?? "/worker/mcp/paperclip-mcp-server.mjs";
+  const mcpConfig = {
+    mcpServers: {
+      paperclip: {
+        type: "stdio",
+        command: "node",
+        args: [mcpServerPath],
+      },
+    },
+  };
+
   const args = [
     "--print",
     "-",
@@ -80,6 +96,9 @@ async function main() {
     "stream-json",
     "--verbose",
     "--dangerously-skip-permissions",
+    "--mcp-config",
+    JSON.stringify(mcpConfig),
+    "--strict-mcp-config",
   ];
   if (model) args.push("--model", model);
   args.push(...extraArgs);
