@@ -1500,6 +1500,7 @@ async function buildPaperclipWakePayload(input: {
         title: string;
         status: string;
         priority: string;
+        description?: string | null;
       }
     | null;
 }) {
@@ -1517,6 +1518,7 @@ async function buildPaperclipWakePayload(input: {
             title: issues.title,
             status: issues.status,
             priority: issues.priority,
+            description: issues.description,
           })
           .from(issues)
           .where(and(eq(issues.id, issueId), eq(issues.companyId, input.companyId)))
@@ -1597,6 +1599,7 @@ async function buildPaperclipWakePayload(input: {
           title: issueSummary.title,
           status: issueSummary.status,
           priority: issueSummary.priority,
+          description: "description" in issueSummary ? issueSummary.description : null,
         }
       : null,
     childIssueSummaries: Array.isArray(input.contextSnapshot.childIssueSummaries)
