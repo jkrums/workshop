@@ -76,6 +76,40 @@ Control plane
 - `ANTHROPIC_API_KEY` — forwarded to each worker
 - `PAPERCLIP_PUBLIC_URL` (or reuses `PAPERCLIP_AUTH_PUBLIC_BASE_URL`) — so workers can call back
 
+## Smoke test journey (production, 2026-04-23 morning)
+
+End-to-end smoke test on `https://workshop-jkrums.fly.dev` blocked on three
+sequential bugs before passing. All three were environmental, not adapter
+bugs — but each manifested identically (428-byte run log ending at
+"spawning Fly Machine…" with no subsequent log).
+
+1. **Worker app v1 release failed** during initial `flyctl deploy`, so the
+   registry tag pointed nowhere. `flyctl releases --app workshop-jkrums-workers`
+   showed `v1 │ failed` and `flyctl image show` was empty. Fix: rerun deploy
+   from `/worker`, then update `WORKSHOP_WORKER_IMAGE` secret on the control
+   plane to the new deployment tag.
+2. **`FLY_API_TOKEN` was unauthorized** for every Machines API call, even
+   reading its own app (`{"error":"unauthorized"}`). Cause unclear — the
+   original token may have been app-scoped rather than org-scoped. Fix:
+   `flyctl tokens create org -o personal -n workshop-control-plane -x 8760h`
+   and set as the new `FLY_API_TOKEN` secret. Org-scoped covers both
+   control plane and workers app.
+3. **Claude CLI refused `--dangerously-skip-permissions` as root.** Stderr:
+   `cannot be used with root/sudo privileges for security reasons`. Fix:
+   add a non-root `worker` user in `worker/Dockerfile` with
+   `HOME=/home/worker`.
+
+Debug technique that unlocked this: the adapter's `createMachine` failure
+path returns `errorMessage` on the run result but does **not** call
+`onLog()`, so the heartbeat ndjson log file silently ends at the "spawning"
+line. Direct checks (`flyctl machines list` empty + `flyctl logs --app
+workshop-jkrums-workers` showing the actual stderr from the worker) were
+how we saw past the 428-byte dead end each time.
+
+Final successful run `bfe826c0-6470-435b-b7a2-83c2079f5e68` (52s,
+$0.295, 10 turns) — agent called paperclipMe via MCP, commented "hello",
+and PATCH'd LOB-3 to `done`.
+
 ## Next
 
 - Hour 6: `persona_skill_path` on the agents table so the worker reads the

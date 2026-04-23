@@ -6,8 +6,12 @@ RUN apt-get update \
 
 RUN npm install -g @anthropic-ai/claude-code@latest
 
+# Claude CLI refuses to run --dangerously-skip-permissions as root.
+RUN useradd --create-home --shell /bin/bash worker
 WORKDIR /worker
 COPY shim.mjs ./shim.mjs
+RUN chown -R worker:worker /worker
+USER worker
 
-ENV NODE_ENV=production
+ENV NODE_ENV=production HOME=/home/worker
 CMD ["node", "/worker/shim.mjs"]
