@@ -1901,6 +1901,7 @@ export function heartbeatService(db: Db) {
         title: issues.title,
         status: issues.status,
         priority: issues.priority,
+        description: issues.description,
         projectId: issues.projectId,
         projectWorkspaceId: issues.projectWorkspaceId,
         executionWorkspaceId: issues.executionWorkspaceId,
@@ -4945,6 +4946,7 @@ export function heartbeatService(db: Db) {
             title: issueRef.title,
             status: issueRef.status,
             priority: issueRef.priority,
+            description: issueContext?.description ?? null,
           }
         : null,
     });
