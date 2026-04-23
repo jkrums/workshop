@@ -197,6 +197,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     PAPERCLIP_WORKER_PROMPT: prompt,
     PAPERCLIP_WORKER_MODEL: cfg.model,
     ANTHROPIC_API_KEY: cfg.anthropicApiKey,
+    ...(process.env.TELEGRAM_BOT_TOKEN
+      ? { TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN }
+      : {}),
+    ...(process.env.TELEGRAM_CHAT_ID
+      ? { TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID }
+      : {}),
     ...(cfg.extraArgs.length > 0
       ? { PAPERCLIP_WORKER_EXTRA_ARGS: JSON.stringify(cfg.extraArgs) }
       : {}),
@@ -217,6 +223,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         ...workerEnv,
         PAPERCLIP_API_KEY: "[redacted]",
         ANTHROPIC_API_KEY: "[redacted]",
+        ...(workerEnv.TELEGRAM_BOT_TOKEN ? { TELEGRAM_BOT_TOKEN: "[redacted]" } : {}),
       },
       prompt,
       promptMetrics: { promptChars: prompt.length },
