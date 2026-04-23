@@ -8,9 +8,9 @@ import {
 // Pre-dispatch hooks run in `dispatchRoutineRun` just before variable
 // resolution. They return a map of variable name → value that gets merged
 // into `automaticVariables`, overriding any routine-declared defaults.
-// Today this is a single switch on routine id (env-configured). When we
-// add a second hook kind, promote the dispatch key to a
-// `routines.dispatch_hook` column + registry lookup.
+// Today this is an env-var-keyed switch per routine. When we add a third
+// hook kind, promote the dispatch key to a `routines.dispatch_hook`
+// column + registry lookup.
 
 export interface DispatchHookContext {
   db: Db;
@@ -25,22 +25,33 @@ export async function buildPreDispatchVariables(
   if (briefingRoutineId && ctx.routine.id === briefingRoutineId) {
     return buildDailyBriefingVariables(ctx.db);
   }
+  const triageRoutineId = process.env.WORKSHOP_INBOX_TRIAGE_ROUTINE_ID;
+  if (triageRoutineId && ctx.routine.id === triageRoutineId) {
+    return buildCommonRoutineVariables();
+  }
   return {};
 }
 
-async function buildDailyBriefingVariables(
-  db: Db,
-): Promise<Record<string, string>> {
-  const [counts, persona] = await Promise.all([
-    gatherBriefingCounts(db),
-    readHermesPersona(),
-  ]);
+async function buildCommonRoutineVariables(): Promise<Record<string, string>> {
+  const persona = await readHermesPersona();
   const workshopUrl =
     process.env.PAPERCLIP_AUTH_PUBLIC_BASE_URL?.replace(/\/+$/, "") ?? "";
   return {
     persona: persona.trim(),
     date_label: formatBriefingDateLabel(),
     workshop_url: workshopUrl,
+  };
+}
+
+async function buildDailyBriefingVariables(
+  db: Db,
+): Promise<Record<string, string>> {
+  const [common, counts] = await Promise.all([
+    buildCommonRoutineVariables(),
+    gatherBriefingCounts(db),
+  ]);
+  return {
+    ...common,
     open_issues_count: String(counts.openIssues),
     pending_approvals_count: String(counts.pendingApprovals),
     active_routines_count: String(counts.activeRoutines),
