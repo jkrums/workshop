@@ -35,11 +35,6 @@ import {
   reconcilePersistedRuntimeServicesOnStartup,
   routineService,
 } from "./services/index.js";
-import {
-  runDailyBriefing,
-  startDailyBriefingScheduler,
-} from "./services/daily-briefing.js";
-import type { DailyBriefingRunnerHolder } from "./routes/daily-briefing.js";
 import { createFeedbackTraceShareClientFromConfig } from "./services/feedback-share-client.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
@@ -595,7 +590,6 @@ export async function startServer(): Promise<StartedServer> {
       databaseBackupInFlight = false;
     }
   };
-  const dailyBriefingRunnerHolder: DailyBriefingRunnerHolder = { run: null };
   const app = await createApp(db as any, {
     uiMode,
     serverPort: listenPort,
@@ -619,7 +613,6 @@ export async function startServer(): Promise<StartedServer> {
     pluginMigrationDb: pluginMigrationDb as any,
     betterAuthHandler,
     resolveSession,
-    dailyBriefingRunnerHolder,
   });
   const server = createServer(app as unknown as Parameters<typeof createServer>[0]);
 
@@ -748,9 +741,6 @@ export async function startServer(): Promise<StartedServer> {
           logger.error({ err }, "periodic heartbeat recovery failed");
         });
     }, config.heartbeatSchedulerIntervalMs);
-
-    dailyBriefingRunnerHolder.run = () => runDailyBriefing(db as any, heartbeat);
-    startDailyBriefingScheduler(db, heartbeat);
   }
 
   if (config.databaseBackupEnabled) {
