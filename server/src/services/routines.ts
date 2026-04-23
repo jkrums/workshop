@@ -45,6 +45,7 @@ import { parseCron, validateCron } from "./cron.js";
 import { heartbeatService } from "./heartbeat.js";
 import { queueIssueAssignmentWakeup, type IssueAssignmentWakeupDeps } from "./issue-assignment-wakeup.js";
 import { logActivity } from "./activity-log.js";
+import { buildPreDispatchVariables } from "./routine-dispatch-hooks.js";
 
 const OPEN_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked"];
 const LIVE_HEARTBEAT_RUN_STATUSES = ["queued", "running", "scheduled_retry"];
@@ -787,6 +788,12 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
         automaticVariables[WORKSPACE_BRANCH_ROUTINE_VARIABLE] = branchName;
       }
     }
+    const hookVariables = await buildPreDispatchVariables({
+      db,
+      routine: { id: input.routine.id, companyId: input.routine.companyId },
+      source: input.source,
+    });
+    Object.assign(automaticVariables, hookVariables);
     const resolvedVariables = resolveRoutineVariableValues(input.routine.variables ?? [], {
       ...input,
       automaticVariables,
