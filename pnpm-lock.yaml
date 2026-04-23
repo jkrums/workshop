@@ -121,6 +121,22 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  packages/adapters/claude-remote:
+    dependencies:
+      '@paperclipai/adapter-claude-local':
+        specifier: workspace:*
+        version: link:../claude-local
+      '@paperclipai/adapter-utils':
+        specifier: workspace:*
+        version: link:../../adapter-utils
+    devDependencies:
+      '@types/node':
+        specifier: ^24.6.0
+        version: 24.12.0
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   packages/adapters/codex-local:
     dependencies:
       '@paperclipai/adapter-utils':
@@ -468,6 +484,9 @@ importers:
       '@paperclipai/adapter-claude-local':
         specifier: workspace:*
         version: link:../packages/adapters/claude-local
+      '@paperclipai/adapter-claude-remote':
+        specifier: workspace:*
+        version: link:../packages/adapters/claude-remote
       '@paperclipai/adapter-codex-local':
         specifier: workspace:*
         version: link:../packages/adapters/codex-local

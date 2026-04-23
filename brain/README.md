@@ -23,6 +23,7 @@ brain/
 
 ### Ops
 - [hour-1-log.md](ops/hour-1-log.md) — 2026-04-22 setup session: fork → install → boot → smoke test → JWT fix → MCP wire → bootstrap commit
+- [hour-5-log.md](ops/hour-5-log.md) — 2026-04-23 remote workers: claude_remote adapter + Fly Machines worker image + callback endpoints
 
 ## Rules for brain/ pages
 

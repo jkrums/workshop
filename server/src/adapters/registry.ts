@@ -11,6 +11,15 @@ import {
 } from "@paperclipai/adapter-claude-local/server";
 import { agentConfigurationDoc as claudeAgentConfigurationDoc, models as claudeModels } from "@paperclipai/adapter-claude-local";
 import {
+  execute as claudeRemoteExecute,
+  testEnvironment as claudeRemoteTestEnvironment,
+  sessionCodec as claudeRemoteSessionCodec,
+} from "@paperclipai/adapter-claude-remote/server";
+import {
+  agentConfigurationDoc as claudeRemoteAgentConfigurationDoc,
+  models as claudeRemoteModels,
+} from "@paperclipai/adapter-claude-remote";
+import {
   execute as codexExecute,
   listCodexSkills,
   syncCodexSkills,
@@ -133,6 +142,19 @@ const claudeLocalAdapter: ServerAdapterModule = {
   requiresMaterializedRuntimeSkills: false,
   agentConfigurationDoc: claudeAgentConfigurationDoc,
   getQuotaWindows: claudeGetQuotaWindows,
+};
+
+const claudeRemoteAdapter: ServerAdapterModule = {
+  type: "claude_remote",
+  execute: claudeRemoteExecute,
+  testEnvironment: claudeRemoteTestEnvironment,
+  sessionCodec: claudeRemoteSessionCodec,
+  sessionManagement: getAdapterSessionManagement("claude_remote") ?? undefined,
+  models: claudeRemoteModels,
+  supportsLocalAgentJwt: true,
+  supportsInstructionsBundle: false,
+  requiresMaterializedRuntimeSkills: false,
+  agentConfigurationDoc: claudeRemoteAgentConfigurationDoc,
 };
 
 const codexLocalAdapter: ServerAdapterModule = {
@@ -311,6 +333,7 @@ const pausedOverrides = new Set<string>();
 function registerBuiltInAdapters() {
   for (const adapter of [
     claudeLocalAdapter,
+    claudeRemoteAdapter,
     codexLocalAdapter,
     openCodeLocalAdapter,
     piLocalAdapter,
