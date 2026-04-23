@@ -8,6 +8,7 @@
 import type { ComponentType } from "react";
 import {
   Bot,
+  Cloud,
   Code,
   Gem,
   MousePointer2,
@@ -56,6 +57,12 @@ const adapterDisplayMap: Record<string, AdapterDisplayInfo> = {
     label: "Claude Code",
     description: "Local Claude agent",
     icon: Sparkles,
+    recommended: true,
+  },
+  claude_remote: {
+    label: "Claude Code (Fly)",
+    description: "Runs in an ephemeral Fly Machine per run",
+    icon: Cloud,
     recommended: true,
   },
   codex_local: {
