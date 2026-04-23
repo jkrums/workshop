@@ -1,0 +1,11 @@
+app = "workshop-jkrums-workers"
+primary_region = "iad"
+
+# Worker image host. Machines are spawned on demand by the control plane via
+# the Fly Machines API and auto-destroy when they exit. There are no always-on
+# machines in this app — `flyctl deploy` only updates the image.
+[build]
+  dockerfile = "Dockerfile"
+
+[experimental]
+  auto_rollback = true
