@@ -33,6 +33,7 @@ import {
   feedbackService,
   heartbeatService,
   instanceSettingsService,
+  loopDetectorService,
   reconcilePersistedRuntimeServicesOnStartup,
   routineService,
 } from "./services/index.js";
@@ -660,6 +661,7 @@ export async function startServer(): Promise<StartedServer> {
     const heartbeat = heartbeatService(db as any);
     const routines = routineService(db as any);
     const budgets = budgetService(db as any);
+    const loopDetector = loopDetectorService(db as any);
   
     // Reap orphaned running runs at startup while in-memory execution state is empty,
     // then resume any persisted queued runs that were waiting on the previous process.
@@ -726,6 +728,25 @@ export async function startServer(): Promise<StartedServer> {
         .catch((err) => {
           logger.error({ err }, "rolling budget sweep failed");
         });
+
+      // Loop detector: catch an agent firing >= N successful heartbeat runs on
+      // the same issue inside M minutes, disable driving triggers, kick a
+      // Yellow approval. Prevents recovery-loop-style runaway spend.
+      if (config.loopDetectorEnabled) {
+        void loopDetector
+          .sweep({
+            windowMinutes: config.loopDetectorWindowMinutes,
+            minRuns: config.loopDetectorMinRuns,
+          })
+          .then((result) => {
+            if (result.freshLoops > 0) {
+              logger.warn({ ...result }, "loop detector paused routines on same-issue loops");
+            }
+          })
+          .catch((err) => {
+            logger.error({ err }, "loop detector sweep failed");
+          });
+      }
   
       // Periodically reap orphaned runs (5-min staleness threshold) and make sure
       // persisted queued work is still being driven forward.

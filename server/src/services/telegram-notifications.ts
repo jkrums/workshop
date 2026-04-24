@@ -31,20 +31,38 @@ export async function notifyTelegram(text: string): Promise<void> {
   }
 }
 
+function approvalsLink(): string {
+  const base =
+    process.env.PAPERCLIP_AUTH_PUBLIC_BASE_URL?.replace(/\/+$/, "") ??
+    process.env.PAPERCLIP_PUBLIC_URL?.replace(/\/+$/, "") ??
+    "";
+  return base ? `${base}/approvals` : "/approvals";
+}
+
 export function buildApprovalNotification(opts: {
   approvalId: string;
   approvalType: string;
   companyId: string;
 }): string {
-  const base =
-    process.env.PAPERCLIP_AUTH_PUBLIC_BASE_URL?.replace(/\/+$/, "") ??
-    process.env.PAPERCLIP_PUBLIC_URL?.replace(/\/+$/, "") ??
-    "";
-  const link = base ? `${base}/approvals` : "/approvals";
   return [
     `🔔 *New approval requested*`,
     `Type: \`${opts.approvalType}\``,
-    `[Open Workshop](${link})`,
+    `[Open Workshop](${approvalsLink()})`,
+  ].join("\n");
+}
+
+export function buildLoopDetectedNotification(opts: {
+  agentName: string;
+  issueLabel: string;
+  runCount: number;
+  disabledTriggerCount: number;
+}): string {
+  return [
+    `🔁 *Same-issue loop detected*`,
+    `Agent: *${opts.agentName}*`,
+    `Issue: \`${opts.issueLabel}\` (${opts.runCount} successful runs in window)`,
+    `${opts.disabledTriggerCount} routine trigger${opts.disabledTriggerCount === 1 ? "" : "s"} auto-disabled.`,
+    `[Review & re-enable](${approvalsLink()})`,
   ].join("\n");
 }
 

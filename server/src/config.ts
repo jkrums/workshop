@@ -85,6 +85,9 @@ export interface Config {
   feedbackExportBackendToken: string | undefined;
   heartbeatSchedulerEnabled: boolean;
   heartbeatSchedulerIntervalMs: number;
+  loopDetectorEnabled: boolean;
+  loopDetectorWindowMinutes: number;
+  loopDetectorMinRuns: number;
   companyDeletionEnabled: boolean;
   telemetryEnabled: boolean;
 }
@@ -331,6 +334,9 @@ export function loadConfig(): Config {
     feedbackExportBackendToken,
     heartbeatSchedulerEnabled: process.env.HEARTBEAT_SCHEDULER_ENABLED !== "false",
     heartbeatSchedulerIntervalMs: Math.max(10000, Number(process.env.HEARTBEAT_SCHEDULER_INTERVAL_MS) || 30000),
+    loopDetectorEnabled: process.env.LOOP_DETECTOR_ENABLED !== "false",
+    loopDetectorWindowMinutes: Math.max(1, Number(process.env.LOOP_DETECTOR_WINDOW_MINUTES) || 10),
+    loopDetectorMinRuns: Math.max(2, Number(process.env.LOOP_DETECTOR_MIN_RUNS) || 3),
     companyDeletionEnabled,
     telemetryEnabled: fileConfig?.telemetry?.enabled ?? true,
   };
