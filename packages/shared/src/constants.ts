@@ -336,8 +336,20 @@ export type BudgetScopeType = (typeof BUDGET_SCOPE_TYPES)[number];
 export const BUDGET_METRICS = ["billed_cents"] as const;
 export type BudgetMetric = (typeof BUDGET_METRICS)[number];
 
-export const BUDGET_WINDOW_KINDS = ["calendar_month_utc", "lifetime"] as const;
+export const BUDGET_WINDOW_KINDS = [
+  "calendar_month_utc",
+  "lifetime",
+  "rolling_hour",
+  "rolling_day",
+] as const;
 export type BudgetWindowKind = (typeof BUDGET_WINDOW_KINDS)[number];
+
+export const BUDGET_ROLLING_WINDOW_KINDS = ["rolling_hour", "rolling_day"] as const;
+export type BudgetRollingWindowKind = (typeof BUDGET_ROLLING_WINDOW_KINDS)[number];
+
+export function isRollingBudgetWindow(kind: BudgetWindowKind): kind is BudgetRollingWindowKind {
+  return kind === "rolling_hour" || kind === "rolling_day";
+}
 
 export const BUDGET_THRESHOLD_TYPES = ["soft", "hard"] as const;
 export type BudgetThresholdType = (typeof BUDGET_THRESHOLD_TYPES)[number];

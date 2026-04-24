@@ -219,6 +219,105 @@ describe("budgetService", () => {
     });
   });
 
+  it("sweeps rolling-hour policies and trips a hard stop on breach", async () => {
+    const rollingPolicy = {
+      id: "policy-rolling-1",
+      companyId: "company-1",
+      scopeType: "agent",
+      scopeId: "agent-1",
+      metric: "billed_cents",
+      windowKind: "rolling_hour",
+      amount: 500,
+      warnPercent: 80,
+      hardStopEnabled: true,
+      notifyEnabled: false,
+      isActive: true,
+    };
+
+    const dbStub = createDbStub([
+      [rollingPolicy],
+      [{ total: 600 }],
+      [],
+      [{
+        companyId: "company-1",
+        name: "Rolling Agent",
+        status: "running",
+        pauseReason: null,
+      }],
+    ]);
+
+    dbStub.queueInsert([{ id: "approval-rolling-1", status: "pending" }]);
+    dbStub.queueInsert([{
+      id: "incident-rolling-1",
+      companyId: "company-1",
+      policyId: "policy-rolling-1",
+      thresholdType: "hard",
+      amountLimit: 500,
+      amountObserved: 600,
+      approvalId: "approval-rolling-1",
+    }]);
+    dbStub.queueUpdate([]);
+
+    const service = budgetService(dbStub.db as any);
+    const result = await service.sweepRollingPolicies();
+
+    expect(result).toEqual({ evaluated: 1, breached: 1 });
+    expect(dbStub.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "budget_override_required",
+        status: "pending",
+      }),
+    );
+    expect(dbStub.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        policyId: "policy-rolling-1",
+        thresholdType: "hard",
+        windowKind: "rolling_hour",
+      }),
+    );
+  });
+
+  it("rolling-window sweep dedupes open incidents across ticks", async () => {
+    const rollingPolicy = {
+      id: "policy-rolling-2",
+      companyId: "company-1",
+      scopeType: "agent",
+      scopeId: "agent-2",
+      metric: "billed_cents",
+      windowKind: "rolling_day",
+      amount: 1000,
+      warnPercent: 80,
+      hardStopEnabled: true,
+      notifyEnabled: false,
+      isActive: true,
+    };
+
+    const existingOpenIncident = {
+      id: "incident-existing",
+      companyId: "company-1",
+      policyId: "policy-rolling-2",
+      scopeType: "agent",
+      scopeId: "agent-2",
+      thresholdType: "hard",
+      status: "open",
+    };
+
+    const dbStub = createDbStub([
+      [rollingPolicy],
+      [{ total: 1200 }],
+      [existingOpenIncident],
+    ]);
+    dbStub.queueUpdate([]);
+
+    const service = budgetService(dbStub.db as any);
+    const result = await service.sweepRollingPolicies();
+
+    // breach still counted (pauseAndCancelScope always runs), but no new incident
+    // or approval insert should fire.
+    expect(result).toEqual({ evaluated: 1, breached: 1 });
+    expect(dbStub.insertValues).not.toHaveBeenCalled();
+  });
+
   it("uses live observed spend when raising a budget incident", async () => {
     const dbStub = createDbStub([
       [{
@@ -283,6 +382,7 @@ describe("budgetService", () => {
         amount: 100,
       }],
       [{ total: 120 }],
+      [],
       [{ id: "approval-1", status: "approved" }],
       [{
         companyId: "company-1",

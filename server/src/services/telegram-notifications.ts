@@ -47,3 +47,36 @@ export function buildApprovalNotification(opts: {
     `[Open Workshop](${link})`,
   ].join("\n");
 }
+
+function formatUsd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+export function buildBudgetBreachNotification(opts: {
+  scopeType: "company" | "agent" | "project";
+  scopeName: string;
+  windowKind: string;
+  amountObserved: number;
+  amountLimit: number;
+}): string {
+  const windowLabel =
+    opts.windowKind === "rolling_hour"
+      ? "past hour"
+      : opts.windowKind === "rolling_day"
+        ? "past 24 hours"
+        : opts.windowKind === "calendar_month_utc"
+          ? "this month"
+          : opts.windowKind;
+  const base =
+    process.env.PAPERCLIP_AUTH_PUBLIC_BASE_URL?.replace(/\/+$/, "") ??
+    process.env.PAPERCLIP_PUBLIC_URL?.replace(/\/+$/, "") ??
+    "";
+  const link = base ? `${base}/approvals` : "/approvals";
+  return [
+    `🛑 *Budget hard-stop tripped*`,
+    `${opts.scopeType}: *${opts.scopeName}*`,
+    `Spent ${formatUsd(opts.amountObserved)} / ${formatUsd(opts.amountLimit)} (${windowLabel})`,
+    `${opts.scopeType === "agent" ? "Agent" : opts.scopeType === "company" ? "Company" : "Project"} paused. Approve or raise the budget:`,
+    `[Open approvals](${link})`,
+  ].join("\n");
+}
