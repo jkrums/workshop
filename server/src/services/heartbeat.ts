@@ -5869,6 +5869,15 @@ export function heartbeatService(db: Db) {
       : null;
     const recoveryAgentNameKey = normalizeAgentNameKey(recoveryAgent?.name);
 
+    const autoClose: {
+      current: {
+        id: string;
+        companyId: string;
+        identifier: string | null;
+        previousStatus: string;
+      } | null;
+    } = { current: null };
+
     const promotionResult = await db.transaction(async (tx) => {
       if (contextIssueId) {
         await tx.execute(
@@ -5902,6 +5911,28 @@ export function heartbeatService(db: Db) {
       if (!issue) return null;
       if (issue.executionRunId && issue.executionRunId !== run.id) return null;
 
+      // Auto-close the issue if this run succeeded and the prompt forgot
+      // to self-close. Without this, in_progress issues with no active
+      // execution get picked up by reconcileStrandedAssignedIssues and
+      // re-queued every cycle — that's the recovery-loop failure mode
+      // that burned $42 on 2026-04-24 (see brain/ops/hour-11-log.md).
+      //
+      // Gated on liveness classifier so multi-round work still gets its
+      // continuation: plan_only / empty_response / blocked / needs_followup
+      // all signal "more work to do" and are left alone here.
+      const CONTINUATION_LIVENESS_STATES = new Set<RunLivenessState>([
+        "plan_only",
+        "empty_response",
+        "blocked",
+        "needs_followup",
+      ]);
+      const livenessState = run.livenessState as RunLivenessState | null;
+      const shouldAutoClose =
+        run.status === "succeeded" &&
+        issue.executionRunId === run.id &&
+        issue.status === "in_progress" &&
+        (livenessState === null || !CONTINUATION_LIVENESS_STATES.has(livenessState));
+
       if (issue.executionRunId === run.id) {
         await tx
           .update(issues)
@@ -5909,9 +5940,19 @@ export function heartbeatService(db: Db) {
             executionRunId: null,
             executionAgentNameKey: null,
             executionLockedAt: null,
+            ...(shouldAutoClose ? { status: "done" as const } : {}),
             updatedAt: new Date(),
           })
           .where(eq(issues.id, issue.id));
+        if (shouldAutoClose) {
+          autoClose.current = {
+            id: issue.id,
+            companyId: issue.companyId,
+            identifier: issue.identifier,
+            previousStatus: issue.status,
+          };
+          issue = { ...issue, status: "done" };
+        }
       }
 
       while (true) {
@@ -6200,6 +6241,25 @@ export function heartbeatService(db: Db) {
         run: queuedRun,
       };
     });
+
+    if (autoClose.current) {
+      const closed = autoClose.current;
+      await logActivity(db, {
+        companyId: closed.companyId,
+        actorType: "system",
+        actorId: "heartbeat",
+        agentId: run.agentId,
+        runId: run.id,
+        action: "issue.auto_closed_on_run_success",
+        entityType: "issue",
+        entityId: closed.id,
+        details: {
+          identifier: closed.identifier,
+          previousStatus: closed.previousStatus,
+          runLivenessState: run.livenessState ?? null,
+        },
+      });
+    }
 
     if (promotionResult?.kind === "blocked") {
       await issuesSvc.addComment(promotionResult.issueId, promotionResult.comment, {});
@@ -7254,6 +7314,10 @@ export function heartbeatService(db: Db) {
     wakeup: enqueueWakeup,
 
     reportRunActivity: clearDetachedRunWarning,
+
+    // Exposed for tests that need to exercise the release path without driving
+    // a full adapter-backed run. Production callsites are all inside this module.
+    _testReleaseIssueExecutionAndPromote: releaseIssueExecutionAndPromote,
 
     reapOrphanedRuns,
 
