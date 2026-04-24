@@ -10,6 +10,7 @@ Workshop is the personal agent control plane forked from Paperclip AI. It orches
 brain/
 ├── concepts/    — Durable ideas: architecture decisions, persona rosters, operating principles
 ├── ops/         — Timestamped event logs: setup history, incidents, weekly notes
+├── roadmap/     — Forward-looking milestone lists. Closes when the goal ships.
 └── README.md    — This index
 ```
 
@@ -24,6 +25,10 @@ brain/
 ### Ops
 - [hour-1-log.md](ops/hour-1-log.md) — 2026-04-22 setup session: fork → install → boot → smoke test → JWT fix → MCP wire → bootstrap commit
 - [hour-5-log.md](ops/hour-5-log.md) — 2026-04-23 remote workers: claude_remote adapter + Fly Machines worker image + callback endpoints
+- [hour-11-log.md](ops/hour-11-log.md) — 2026-04-24 triage routes to Atlas, Minerva seeded inert, $42 overnight recovery-loop incident, both routine triggers paused
+
+### Roadmap
+- [to-lobbi.md](roadmap/to-lobbi.md) — Milestone punch list from today to "Lobbi actually runs through Workshop". Six gates: cost-safety, self-close fix, Atlas codes, Minerva reviews, approval queue, first real Lobbi work.
 
 ## Rules for brain/ pages
 
