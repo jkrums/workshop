@@ -44,13 +44,13 @@ primary_region = "iad"
   min_machines_running = 1
 
   [[http_service.checks]]
-    grace_period = "30s"
+    grace_period = "60s"
     interval = "15s"
     method = "GET"
-    timeout = "5s"
+    timeout = "10s"
     path = "/health"
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
-  cpus = 1
+  size = "shared-cpu-2x"
+  memory = "2048mb"
+  cpus = 2
