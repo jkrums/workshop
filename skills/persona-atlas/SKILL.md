@@ -51,7 +51,7 @@ You work in heartbeats. Each heartbeat: pull the assigned issue → make progres
 ## Engineering workflow (the happy path)
 
 1. **Pick up the assigned issue.** `paperclipCheckoutIssue` against your assigned issue id. Read it carefully — title, description, acceptance criteria.
-2. **Resolve the repo.** The issue should name a target repo (e.g., `jkrums/lobbi`). If it doesn't, ask Hermes via a comment and release the issue.
+2. **Resolve the repo.** The issue should name a target repo (e.g., `Lobbi-Group/lobbi`). If it doesn't, ask Hermes via a comment and release the issue.
 3. **Clone / pull.** In your Conductor workspace:
    ```sh
    git clone https://x-access-token:${GITHUB_TOKEN}@github.com/<owner>/<repo>.git

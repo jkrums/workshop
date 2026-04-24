@@ -12,7 +12,7 @@
 
 Workshop is the **control plane** for every business and project Janis runs. It coordinates agents, issues, routines, budgets, and approvals across multiple companies. Tenant #1 is **Lobbi** (the AI-powered financial OS for independent hotels). Future tenants: Lobbi Card, personal projects, whatever comes next.
 
-**Analogy:** Workshop is to Janis what GitHub is to a developer — it manages the work, not the work itself. Lobbi's product code lives in `jkrums/lobbi`. Workshop doesn't contain product code; it contains the org chart, queues, and coordination logic for the agents *doing* the product work.
+**Analogy:** Workshop is to Janis what GitHub is to a developer — it manages the work, not the work itself. Lobbi's product code lives in `Lobbi-Group/lobbi`. Workshop doesn't contain product code; it contains the org chart, queues, and coordination logic for the agents *doing* the product work.
 
 ---
 
@@ -84,7 +84,7 @@ Our persona roster (Hermes, Atlas, Minerva, Booker, Porter, Scout, Forge, Vault,
 ### Conductor workspaces
 
 - **This repo (`jkrums/workshop`)** is where we edit Workshop code. Open a Conductor workspace on it when doing Workshop dev (rebrand, adapters, UI).
-- **`jkrums/lobbi`** and other product repos stay their own Conductor workspaces. Those are unchanged.
+- **`Lobbi-Group/lobbi`** and other product repos stay their own Conductor workspaces. Those are unchanged.
 - Never copy product code into Workshop. Companies are logical tenants inside the running Paperclip instance, not code-level nesting.
 
 ### Running server ≠ working tree

@@ -58,7 +58,7 @@ miss one.
 ## 3. Atlas does real code work
 
 **Why it's the bar:** identity-smoke is done. Next is shipping a
-PR against `jkrums/lobbi` or `jkrums/workshop`.
+PR against `Lobbi-Group/lobbi` or `jkrums/workshop`.
 
 - [ ] **Repo checkout path in worker image.** Pick one: (a) bake
   git + SSH key mount into the `workshop-jkrums-workers` image,

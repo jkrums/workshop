@@ -13,7 +13,7 @@ approval handler can merge.
 
 - A **fine-grained** GitHub PAT.
 - Scoped to the repos Atlas is allowed to touch (start with just
-  `jkrums/lobbi` for now).
+  `Lobbi-Group/lobbi` for now).
 - Permissions:
   - **Contents**: Read and write
   - **Pull requests**: Read and write
@@ -27,7 +27,7 @@ approval handler can merge.
 1. https://github.com/settings/tokens?type=beta (personal fine-grained token)
 2. Name: `workshop-atlas-lobbi`
 3. Resource owner: your personal account
-4. Repository access: only `jkrums/lobbi` (add more later)
+4. Repository access: only `Lobbi-Group/lobbi` (add more later)
 5. Permissions above
 6. Copy the `github_pat_…` string somewhere safe (1Password "Workshop
    — Atlas GitHub PAT").
