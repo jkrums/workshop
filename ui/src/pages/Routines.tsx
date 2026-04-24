@@ -1,12 +1,13 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "@/lib/router";
-import { Check, ChevronDown, ChevronRight, Layers, MoreHorizontal, Plus, Repeat } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Layers, MoreHorizontal, Plus, Repeat, ShieldAlert, ShieldCheck } from "lucide-react";
 import { routinesApi } from "../api/routines";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
 import { issuesApi } from "../api/issues";
 import { heartbeatsApi } from "../api/heartbeats";
+import { instanceSettingsApi } from "../api/instanceSettings";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useToastActions } from "../context/ToastContext";
@@ -301,6 +302,48 @@ export function Routines() {
   const projectSelectorRef = useRef<HTMLButtonElement | null>(null);
   const [runningRoutineId, setRunningRoutineId] = useState<string | null>(null);
   const [statusMutationRoutineId, setStatusMutationRoutineId] = useState<string | null>(null);
+
+  const instanceGeneralQuery = useQuery({
+    queryKey: ["instance-settings", "general"] as const,
+    queryFn: () => instanceSettingsApi.getGeneral(),
+  });
+  const killSwitchOn = instanceGeneralQuery.data?.routinesGlobalKillSwitch === true;
+
+  const killSwitchMutation = useMutation({
+    mutationFn: (next: boolean) =>
+      instanceSettingsApi.updateGeneral({ routinesGlobalKillSwitch: next }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["instance-settings", "general"] as const, updated);
+      pushToast({
+        tone: updated.routinesGlobalKillSwitch ? "warn" : "success",
+        title: updated.routinesGlobalKillSwitch
+          ? "Routines kill switch engaged"
+          : "Routines kill switch cleared",
+        body: updated.routinesGlobalKillSwitch
+          ? "All routine triggers are suspended until the switch is cleared."
+          : "Routine triggers will fire on their normal schedule again.",
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        tone: "error",
+        title: "Could not toggle kill switch",
+        body: error instanceof Error ? error.message : "Unknown error",
+      });
+    },
+  });
+
+  const toggleKillSwitch = () => {
+    if (killSwitchMutation.isPending) return;
+    const next = !killSwitchOn;
+    if (next) {
+      const confirmed = window.confirm(
+        "Engage the global routines kill switch?\n\nAll scheduled, webhook, and manual routine dispatches will be blocked until you clear it.",
+      );
+      if (!confirmed) return;
+    }
+    killSwitchMutation.mutate(next);
+  };
   const [runDialogRoutine, setRunDialogRoutine] = useState<RoutineListItem | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -575,11 +618,38 @@ export function Routines() {
             Recurring work definitions that materialize into auditable execution issues.
           </p>
         </div>
-        <Button onClick={() => setComposerOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create routine
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={killSwitchOn ? "destructive" : "outline"}
+            onClick={toggleKillSwitch}
+            disabled={killSwitchMutation.isPending || instanceGeneralQuery.isLoading}
+            title={
+              killSwitchOn
+                ? "Kill switch engaged — click to resume"
+                : "Global kill switch — blocks every routine dispatch at once"
+            }
+          >
+            {killSwitchOn ? (
+              <ShieldAlert className="mr-2 h-4 w-4" />
+            ) : (
+              <ShieldCheck className="mr-2 h-4 w-4" />
+            )}
+            {killSwitchOn ? "Resume routines" : "Kill switch"}
+          </Button>
+          <Button onClick={() => setComposerOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create routine
+          </Button>
+        </div>
       </div>
+      {killSwitchOn ? (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <ShieldAlert className="h-4 w-4" />
+          <span>
+            Global kill switch is engaged. No routine triggers will fire until it is cleared.
+          </span>
+        </div>
+      ) : null}
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <PageTabBar

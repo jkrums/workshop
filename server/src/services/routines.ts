@@ -46,6 +46,7 @@ import { heartbeatService } from "./heartbeat.js";
 import { queueIssueAssignmentWakeup, type IssueAssignmentWakeupDeps } from "./issue-assignment-wakeup.js";
 import { logActivity } from "./activity-log.js";
 import { buildPreDispatchVariables } from "./routine-dispatch-hooks.js";
+import { instanceSettingsService } from "./instance-settings.js";
 
 const OPEN_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked"];
 const LIVE_HEARTBEAT_RUN_STATUSES = ["queued", "running", "scheduled_retry"];
@@ -361,6 +362,18 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
   const issueSvc = issueService(db);
   const secretsSvc = secretService(db);
   const heartbeat = deps.heartbeat ?? heartbeatService(db);
+  const instanceSettings = instanceSettingsService(db);
+
+  async function isRoutinesGlobalKillSwitchOn(): Promise<boolean> {
+    try {
+      const general = await instanceSettings.getGeneral();
+      return general.routinesGlobalKillSwitch === true;
+    } catch {
+      // Fail open — if settings are unreadable, don't silently break every
+      // routine. Operators can still set enabled=false per trigger.
+      return false;
+    }
+  }
 
   async function getRoutineById(id: string) {
     return db
@@ -763,6 +776,9 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
     executionWorkspacePreference?: string | null;
     executionWorkspaceSettings?: Record<string, unknown> | null;
   }) {
+    if (await isRoutinesGlobalKillSwitchOn()) {
+      throw conflict("Routines are globally disabled (kill switch is on).");
+    }
     const projectId = input.projectId ?? input.routine.projectId ?? null;
     const assigneeAgentId = input.assigneeAgentId ?? input.routine.assigneeAgentId ?? null;
     if (!assigneeAgentId) {
@@ -1567,7 +1583,10 @@ export function routineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeup
       }));
     },
 
-    tickScheduledTriggers: async (now: Date = new Date()) => {
+    tickScheduledTriggers: async (now: Date = new Date()): Promise<{ triggered: number; killSwitchEngaged?: boolean }> => {
+      if (await isRoutinesGlobalKillSwitchOn()) {
+        return { triggered: 0, killSwitchEngaged: true };
+      }
       const due = await db
         .select({
           trigger: routineTriggers,
