@@ -7,6 +7,8 @@ import { agentService } from "./agents.js";
 import { budgetService } from "./budgets.js";
 import { notifyHireApproved } from "./hire-hook.js";
 import { instanceSettingsService } from "./instance-settings.js";
+import { commentOnPullRequest, mergePullRequest } from "./pr-merge.js";
+import { logger } from "../middleware/logger.js";
 
 export function approvalService(db: Db) {
   const agentsSvc = agentService(db);
@@ -165,6 +167,21 @@ export function approvalService(db: Db) {
         }
       }
 
+      if (applied && updated.type === "pr_merge_requested") {
+        const result = await mergePullRequest(db, updated.companyId, updated.payload);
+        if (result.merged) {
+          logger.info(
+            { approvalId: id, companyId: updated.companyId, sha: result.sha },
+            "pr_merge_requested approval merged PR",
+          );
+        } else {
+          logger.warn(
+            { approvalId: id, companyId: updated.companyId, statusCode: result.statusCode, message: result.message },
+            "pr_merge_requested approval approved but GitHub merge did not succeed",
+          );
+        }
+      }
+
       return { approval: updated, applied };
     },
 
@@ -182,6 +199,18 @@ export function approvalService(db: Db) {
         if (payloadAgentId) {
           await agentsSvc.terminate(payloadAgentId);
         }
+      }
+
+      if (applied && updated.type === "pr_merge_requested" && decisionNote) {
+        // Leave a trail on the PR so the agent (and any reviewer) can see
+        // the human's reason. Best-effort; don't fail the rejection if
+        // GitHub is unreachable.
+        void commentOnPullRequest(
+          db,
+          updated.companyId,
+          updated.payload,
+          `**Merge rejected by human reviewer.**\n\n${decisionNote}`,
+        ).catch(() => {});
       }
 
       return { approval: updated, applied };
