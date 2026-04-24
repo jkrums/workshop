@@ -917,4 +917,30 @@ describeEmbeddedPostgres("routine service live-execution coalescing", () => {
     expect(run.source).toBe("webhook");
     expect(run.status).toBe("issue_created");
   });
+
+  it("global kill switch blocks all routine dispatches and tickScheduledTriggers", async () => {
+    const { svc, routine } = await seedFixture();
+    const settings = instanceSettingsService(db);
+
+    // Baseline: manual run works.
+    const baselineRun = await svc.runRoutine(routine.id, { source: "manual" });
+    expect(baselineRun.status).toBe("issue_created");
+
+    await settings.updateGeneral({ routinesGlobalKillSwitch: true });
+
+    await expect(svc.runRoutine(routine.id, { source: "manual" })).rejects.toThrow(
+      /kill switch/i,
+    );
+
+    const blockedTick = await svc.tickScheduledTriggers(new Date());
+    expect(blockedTick).toMatchObject({ triggered: 0, killSwitchEngaged: true });
+
+    await settings.updateGeneral({ routinesGlobalKillSwitch: false });
+
+    // After resume, dispatch should succeed again — status may be "coalesced"
+    // if an earlier run's issue is still active, or "issue_created" if not.
+    // Either way, the dispatch is no longer blocked.
+    const resumedRun = await svc.runRoutine(routine.id, { source: "manual" });
+    expect(["issue_created", "coalesced"]).toContain(resumedRun.status);
+  });
 });
