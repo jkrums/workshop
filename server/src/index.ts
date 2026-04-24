@@ -29,6 +29,7 @@ import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import {
+  budgetService,
   feedbackService,
   heartbeatService,
   instanceSettingsService,
@@ -658,6 +659,7 @@ export async function startServer(): Promise<StartedServer> {
   if (config.heartbeatSchedulerEnabled) {
     const heartbeat = heartbeatService(db as any);
     const routines = routineService(db as any);
+    const budgets = budgetService(db as any);
   
     // Reap orphaned running runs at startup while in-memory execution state is empty,
     // then resume any persisted queued runs that were waiting on the previous process.
@@ -709,6 +711,20 @@ export async function startServer(): Promise<StartedServer> {
         })
         .catch((err) => {
           logger.error({ err }, "routine scheduler tick failed");
+        });
+
+      // Re-evaluate rolling-window budget policies (per-hour, per-day tripwires).
+      // Rolling windows advance continuously, so a policy can slip into breach
+      // even when no new cost event lands — this sweep is the safety net.
+      void budgets
+        .sweepRollingPolicies()
+        .then((result) => {
+          if (result.breached > 0) {
+            logger.warn({ ...result }, "rolling budget sweep tripped hard stops");
+          }
+        })
+        .catch((err) => {
+          logger.error({ err }, "rolling budget sweep failed");
         });
   
       // Periodically reap orphaned runs (5-min staleness threshold) and make sure

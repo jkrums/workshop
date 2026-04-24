@@ -21,8 +21,10 @@ import type {
   BudgetThresholdType,
   BudgetWindowKind,
 } from "@paperclipai/shared";
+import { isRollingBudgetWindow } from "@paperclipai/shared";
 import { notFound, unprocessable } from "../errors.js";
 import { logActivity } from "./activity-log.js";
+import { buildBudgetBreachNotification, notifyTelegram } from "./telegram-notifications.js";
 
 type ScopeRecord = {
   companyId: string;
@@ -58,6 +60,12 @@ function resolveWindow(windowKind: BudgetWindowKind, now = new Date()) {
       start: new Date(Date.UTC(1970, 0, 1, 0, 0, 0, 0)),
       end: new Date(Date.UTC(9999, 0, 1, 0, 0, 0, 0)),
     };
+  }
+  if (windowKind === "rolling_hour") {
+    return { start: new Date(now.getTime() - 60 * 60 * 1000), end: now };
+  }
+  if (windowKind === "rolling_day") {
+    return { start: new Date(now.getTime() - 24 * 60 * 60 * 1000), end: now };
   }
   return currentUtcMonthWindow(now);
 }
@@ -149,7 +157,7 @@ async function computeObservedAmount(
   if (policy.scopeType === "agent") conditions.push(eq(costEvents.agentId, policy.scopeId));
   if (policy.scopeType === "project") conditions.push(eq(costEvents.projectId, policy.scopeId));
   const { start, end } = resolveWindow(policy.windowKind as BudgetWindowKind);
-  if (policy.windowKind === "calendar_month_utc") {
+  if (policy.windowKind !== "lifetime") {
     conditions.push(gte(costEvents.occurredAt, start));
     conditions.push(lt(costEvents.occurredAt, end));
   }
@@ -352,24 +360,34 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
     amountObserved: number,
   ) {
     const { start, end } = resolveWindow(policy.windowKind as BudgetWindowKind);
-    const existing = await db
-      .select()
-      .from(budgetIncidents)
-      .where(
-        and(
+    // Rolling windows advance every tick, so matching on windowStart would
+    // never find the previous incident and we'd alert on every sweep.
+    // Dedup on open incidents only — once resolved or dismissed, a fresh
+    // breach is a fresh alert.
+    const dedupConditions = isRollingBudgetWindow(policy.windowKind as BudgetWindowKind)
+      ? [
+          eq(budgetIncidents.policyId, policy.id),
+          eq(budgetIncidents.thresholdType, thresholdType),
+          eq(budgetIncidents.status, "open"),
+        ]
+      : [
           eq(budgetIncidents.policyId, policy.id),
           eq(budgetIncidents.windowStart, start),
           eq(budgetIncidents.thresholdType, thresholdType),
           ne(budgetIncidents.status, "dismissed"),
-        ),
-      )
+        ];
+    const existing = await db
+      .select()
+      .from(budgetIncidents)
+      .where(and(...dedupConditions))
       .then((rows) => rows[0] ?? null);
-    if (existing) return existing;
+    if (existing) return { incident: existing, isFresh: false, scopeName: null as string | null };
 
     const scope = await resolveScopeRecord(db, policy.scopeType as BudgetScopeType, policy.scopeId);
+    const scopeName = normalizeScopeName(policy.scopeType as BudgetScopeType, scope.name);
     const payload = buildApprovalPayload({
       policy,
-      scopeName: normalizeScopeName(policy.scopeType as BudgetScopeType, scope.name),
+      scopeName,
       thresholdType,
       amountObserved,
       windowStart: start,
@@ -391,7 +409,7 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
         .then((rows) => rows[0] ?? null)
       : null;
 
-    return db
+    const incident = await db
       .insert(budgetIncidents)
       .values({
         companyId: policy.companyId,
@@ -410,6 +428,25 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
       })
       .returning()
       .then((rows) => rows[0] ?? null);
+
+    return { incident, isFresh: true, scopeName };
+  }
+
+  async function hasOtherOpenHardIncidentsForScope(policy: PolicyRow): Promise<boolean> {
+    const rows = await db
+      .select({ id: budgetIncidents.id })
+      .from(budgetIncidents)
+      .where(
+        and(
+          eq(budgetIncidents.companyId, policy.companyId),
+          eq(budgetIncidents.scopeType, policy.scopeType),
+          eq(budgetIncidents.scopeId, policy.scopeId),
+          eq(budgetIncidents.thresholdType, "hard"),
+          eq(budgetIncidents.status, "open"),
+          ne(budgetIncidents.policyId, policy.id),
+        ),
+      );
+    return rows.length > 0;
   }
 
   async function resolveOpenSoftIncidents(policyId: string) {
@@ -490,6 +527,80 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
         };
       }),
     );
+  }
+
+  async function evaluatePolicyThresholds(
+    policy: PolicyRow,
+  ): Promise<{ observedAmount: number; softTripped: boolean; hardStopTripped: boolean }> {
+    if (policy.metric !== "billed_cents" || policy.amount <= 0) {
+      return { observedAmount: 0, softTripped: false, hardStopTripped: false };
+    }
+    const observedAmount = await computeObservedAmount(db, policy);
+    const softThreshold = Math.ceil((policy.amount * policy.warnPercent) / 100);
+    let softTripped = false;
+    let hardStopTripped = false;
+
+    if (policy.notifyEnabled && observedAmount >= softThreshold) {
+      softTripped = true;
+      const softResult = await createIncidentIfNeeded(policy, "soft", observedAmount);
+      if (softResult.incident) {
+        await logActivity(db, {
+          companyId: policy.companyId,
+          actorType: "system",
+          actorId: "budget_service",
+          action: "budget.soft_threshold_crossed",
+          entityType: "budget_incident",
+          entityId: softResult.incident.id,
+          details: {
+            scopeType: policy.scopeType,
+            scopeId: policy.scopeId,
+            windowKind: policy.windowKind,
+            amountObserved: observedAmount,
+            amountLimit: policy.amount,
+          },
+        });
+      }
+    }
+
+    if (policy.hardStopEnabled && observedAmount >= policy.amount) {
+      hardStopTripped = true;
+      await resolveOpenSoftIncidents(policy.id);
+      const hardResult = await createIncidentIfNeeded(policy, "hard", observedAmount);
+      await pauseAndCancelScopeForBudget(policy);
+      if (hardResult.incident) {
+        await logActivity(db, {
+          companyId: policy.companyId,
+          actorType: "system",
+          actorId: "budget_service",
+          action: "budget.hard_threshold_crossed",
+          entityType: "budget_incident",
+          entityId: hardResult.incident.id,
+          details: {
+            scopeType: policy.scopeType,
+            scopeId: policy.scopeId,
+            windowKind: policy.windowKind,
+            amountObserved: observedAmount,
+            amountLimit: policy.amount,
+            approvalId: hardResult.incident.approvalId ?? null,
+          },
+        });
+      }
+      // Fire Telegram only on fresh breaches (first time the incident was created)
+      // so we don't spam on every sweep tick.
+      if (hardResult.isFresh && hardResult.incident && hardResult.scopeName) {
+        void notifyTelegram(
+          buildBudgetBreachNotification({
+            scopeType: policy.scopeType as BudgetScopeType,
+            scopeName: hardResult.scopeName,
+            windowKind: policy.windowKind,
+            amountObserved: observedAmount,
+            amountLimit: policy.amount,
+          }),
+        ).catch(() => {});
+      }
+    }
+
+    return { observedAmount, softTripped, hardStopTripped };
   }
 
   return {
@@ -589,7 +700,12 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
       if (amount > 0) {
         const observedAmount = await computeObservedAmount(db, row);
         if (observedAmount < amount) {
-          await resumeScopeFromBudget(row);
+          // Only resume the scope if no other policy on the same scope is
+          // still in hard-stop — otherwise a new hourly policy could silently
+          // unpause an agent that's still over its monthly budget.
+          if (!(await hasOtherOpenHardIncidentsForScope(row))) {
+            await resumeScopeFromBudget(row);
+          }
           await resolveOpenIncidentsForPolicy(row.id, actorUserId ? "approved" : null, actorUserId);
         } else {
           const softThreshold = Math.ceil((row.amount * row.warnPercent) / 100);
@@ -603,7 +719,9 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
           }
         }
       } else {
-        await resumeScopeFromBudget(row);
+        if (!(await hasOtherOpenHardIncidentsForScope(row))) {
+          await resumeScopeFromBudget(row);
+        }
         await resolveOpenIncidentsForPolicy(row.id, actorUserId ? "approved" : null, actorUserId);
       }
 
@@ -664,53 +782,33 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
       });
 
       for (const policy of relevantPolicies) {
-        if (policy.metric !== "billed_cents" || policy.amount <= 0) continue;
-        const observedAmount = await computeObservedAmount(db, policy);
-        const softThreshold = Math.ceil((policy.amount * policy.warnPercent) / 100);
-
-        if (policy.notifyEnabled && observedAmount >= softThreshold) {
-          const softIncident = await createIncidentIfNeeded(policy, "soft", observedAmount);
-          if (softIncident) {
-            await logActivity(db, {
-              companyId: policy.companyId,
-              actorType: "system",
-              actorId: "budget_service",
-              action: "budget.soft_threshold_crossed",
-              entityType: "budget_incident",
-              entityId: softIncident.id,
-              details: {
-                scopeType: policy.scopeType,
-                scopeId: policy.scopeId,
-                amountObserved: observedAmount,
-                amountLimit: policy.amount,
-              },
-            });
-          }
-        }
-
-        if (policy.hardStopEnabled && observedAmount >= policy.amount) {
-          await resolveOpenSoftIncidents(policy.id);
-          const hardIncident = await createIncidentIfNeeded(policy, "hard", observedAmount);
-          await pauseAndCancelScopeForBudget(policy);
-          if (hardIncident) {
-            await logActivity(db, {
-              companyId: policy.companyId,
-              actorType: "system",
-              actorId: "budget_service",
-              action: "budget.hard_threshold_crossed",
-              entityType: "budget_incident",
-              entityId: hardIncident.id,
-              details: {
-                scopeType: policy.scopeType,
-                scopeId: policy.scopeId,
-                amountObserved: observedAmount,
-                amountLimit: policy.amount,
-                approvalId: hardIncident.approvalId ?? null,
-              },
-            });
-          }
-        }
+        await evaluatePolicyThresholds(policy);
       }
+    },
+
+    // Scans all active rolling-window policies across every company and re-runs
+    // the threshold check. Call periodically — rolling windows advance between
+    // cost events, so evaluateCostEvent alone can miss a hard-stop when traffic
+    // pauses right around the threshold.
+    sweepRollingPolicies: async () => {
+      const rows = await db
+        .select()
+        .from(budgetPolicies)
+        .where(
+          and(
+            eq(budgetPolicies.isActive, true),
+            inArray(budgetPolicies.windowKind, ["rolling_hour", "rolling_day"]),
+          ),
+        );
+
+      let evaluated = 0;
+      let breached = 0;
+      for (const policy of rows) {
+        const result = await evaluatePolicyThresholds(policy);
+        evaluated += 1;
+        if (result.hardStopTripped) breached += 1;
+      }
+      return { evaluated, breached };
     },
 
     getInvocationBlock: async (
@@ -908,7 +1006,6 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
             .where(eq(agents.id, policy.scopeId));
         }
 
-        await resumeScopeFromBudget(policy);
         await db
           .update(budgetIncidents)
           .set({
@@ -917,6 +1014,11 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
             updatedAt: now,
           })
           .where(and(eq(budgetIncidents.policyId, policy.id), eq(budgetIncidents.status, "open")));
+
+        // Resume only if this was the last hard-stop holding the scope paused.
+        if (!(await hasOtherOpenHardIncidentsForScope(policy))) {
+          await resumeScopeFromBudget(policy);
+        }
 
         await markApprovalStatus(db, incident.approvalId ?? null, "approved", input.decisionNote, actorUserId);
       } else {
