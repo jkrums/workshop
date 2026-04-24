@@ -1,4 +1,4 @@
-import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck } from "lucide-react";
+import { GitMerge, GitPullRequest, Lightbulb, Repeat, ShieldAlert, ShieldCheck, UserPlus } from "lucide-react";
 import { formatCents } from "../lib/utils";
 
 export const typeLabel: Record<string, string> = {
@@ -6,6 +6,8 @@ export const typeLabel: Record<string, string> = {
   approve_ceo_strategy: "CEO Strategy",
   budget_override_required: "Budget Override",
   request_board_approval: "Board Approval",
+  loop_detected: "Same-Issue Loop",
+  pr_merge_requested: "PR Merge",
 };
 
 function firstNonEmptyString(...values: unknown[]): string | null {
@@ -41,6 +43,8 @@ export const typeIcon: Record<string, typeof UserPlus> = {
   approve_ceo_strategy: Lightbulb,
   budget_override_required: ShieldAlert,
   request_board_approval: ShieldCheck,
+  loop_detected: Repeat,
+  pr_merge_requested: GitMerge,
 };
 
 export const defaultTypeIcon = ShieldCheck;
@@ -229,6 +233,82 @@ function BoardApprovalPayloadContent({ payload }: { payload: Record<string, unkn
   );
 }
 
+export function PrMergePayload({ payload }: { payload: Record<string, unknown> }) {
+  const owner = typeof payload.owner === "string" ? payload.owner : null;
+  const repo = typeof payload.repo === "string" ? payload.repo : null;
+  const prNumber = typeof payload.prNumber === "number" ? payload.prNumber : null;
+  const prUrl = typeof payload.prUrl === "string" ? payload.prUrl : null;
+  const title = firstNonEmptyString(payload.title, payload.prTitle);
+  const summary = firstNonEmptyString(payload.summary, payload.description);
+  const branch = firstNonEmptyString(payload.branch, payload.headRef);
+  const mergeMethod =
+    typeof payload.mergeMethod === "string" ? payload.mergeMethod : "squash";
+
+  const repoLabel = owner && repo ? `${owner}/${repo}` : repo ?? owner ?? null;
+  const prLink =
+    prUrl ??
+    (owner && repo && prNumber
+      ? `https://github.com/${owner}/${repo}/pull/${prNumber}`
+      : null);
+
+  return (
+    <div className="mt-3 space-y-1.5 text-sm">
+      {title && (
+        <div className="flex items-center gap-2">
+          <GitPullRequest className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="font-medium">{title}</span>
+        </div>
+      )}
+      <PayloadField label="Repo" value={repoLabel} />
+      <PayloadField label="PR" value={prNumber ? `#${prNumber}` : null} />
+      <PayloadField label="Branch" value={branch} />
+      <PayloadField label="Merge as" value={mergeMethod} />
+      {summary && (
+        <div className="mt-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground whitespace-pre-wrap max-h-48 overflow-y-auto">
+          {summary}
+        </div>
+      )}
+      {prLink && (
+        <a
+          href={prLink}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block text-xs text-primary underline underline-offset-2 hover:no-underline"
+        >
+          Open on GitHub →
+        </a>
+      )}
+    </div>
+  );
+}
+
+export function LoopDetectedPayload({ payload }: { payload: Record<string, unknown> }) {
+  const issueLabel = firstNonEmptyString(
+    payload.issueIdentifier,
+    payload.issueTitle,
+    payload.issueId,
+  );
+  const agentName = firstNonEmptyString(payload.agentName, payload.agentId);
+  const runCount = typeof payload.runCount === "number" ? payload.runCount : null;
+  const triggerIds = Array.isArray(payload.disabledTriggerIds)
+    ? payload.disabledTriggerIds.filter((v): v is string => typeof v === "string")
+    : [];
+  return (
+    <div className="mt-3 space-y-1.5 text-sm">
+      <PayloadField label="Issue" value={issueLabel} />
+      <PayloadField label="Agent" value={agentName} />
+      <PayloadField label="Runs" value={runCount ? `${runCount} in window` : null} />
+      <PayloadField
+        label="Disabled"
+        value={triggerIds.length ? `${triggerIds.length} trigger${triggerIds.length === 1 ? "" : "s"}` : null}
+      />
+      {!!payload.guidance && (
+        <p className="text-xs text-muted-foreground">{String(payload.guidance)}</p>
+      )}
+    </div>
+  );
+}
+
 export function ApprovalPayloadRenderer({
   type,
   payload,
@@ -243,5 +323,7 @@ export function ApprovalPayloadRenderer({
   if (type === "request_board_approval") {
     return <BoardApprovalPayload payload={payload} hideTitle={hidePrimaryTitle} />;
   }
+  if (type === "pr_merge_requested") return <PrMergePayload payload={payload} />;
+  if (type === "loop_detected") return <LoopDetectedPayload payload={payload} />;
   return <CeoStrategyPayload payload={payload} />;
 }

@@ -262,6 +262,7 @@ export const APPROVAL_TYPES = [
   "budget_override_required",
   "request_board_approval",
   "loop_detected",
+  "pr_merge_requested",
 ] as const;
 export type ApprovalType = (typeof APPROVAL_TYPES)[number];
 
