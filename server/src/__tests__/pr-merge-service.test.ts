@@ -43,7 +43,7 @@ describe("mergePullRequest", () => {
   it("calls GitHub merge API with the right URL, method, and auth header", async () => {
     const { db } = createDbStub([[{ id: "secret-1" }]]);
     const result = await mergePullRequest(db, "company-1", {
-      owner: "jkrums",
+      owner: "Lobbi-Group",
       repo: "lobbi",
       prNumber: 42,
       mergeMethod: "squash",
@@ -52,7 +52,7 @@ describe("mergePullRequest", () => {
     expect(result.merged).toBe(true);
     expect(result.sha).toBe("abc123");
     expect(fetchCalls).toHaveLength(1);
-    expect(fetchCalls[0]!.url).toBe("https://api.github.com/repos/jkrums/lobbi/pulls/42/merge");
+    expect(fetchCalls[0]!.url).toBe("https://api.github.com/repos/Lobbi-Group/lobbi/pulls/42/merge");
     expect(fetchCalls[0]!.init?.method).toBe("PUT");
     const headers = fetchCalls[0]!.init?.headers as Record<string, string>;
     expect(headers.Authorization).toBe("token ghp_fake_token_for_tests");
@@ -64,7 +64,7 @@ describe("mergePullRequest", () => {
   it("defaults to squash merge when no method specified", async () => {
     const { db } = createDbStub([[{ id: "secret-1" }]]);
     await mergePullRequest(db, "company-1", {
-      owner: "jkrums",
+      owner: "Lobbi-Group",
       repo: "lobbi",
       prNumber: 1,
     });
@@ -75,7 +75,7 @@ describe("mergePullRequest", () => {
   it("returns merged=false with message when no github_token secret exists", async () => {
     const { db } = createDbStub([[]]);
     const result = await mergePullRequest(db, "company-1", {
-      owner: "jkrums",
+      owner: "Lobbi-Group",
       repo: "lobbi",
       prNumber: 42,
     });
@@ -93,7 +93,7 @@ describe("mergePullRequest", () => {
     );
     const { db } = createDbStub([[{ id: "secret-1" }]]);
     const result = await mergePullRequest(db, "company-1", {
-      owner: "jkrums",
+      owner: "Lobbi-Group",
       repo: "lobbi",
       prNumber: 42,
     });
@@ -104,7 +104,7 @@ describe("mergePullRequest", () => {
 
   it("rejects malformed payload without calling fetch", async () => {
     const { db } = createDbStub([]);
-    const result = await mergePullRequest(db, "company-1", { owner: "jkrums" });
+    const result = await mergePullRequest(db, "company-1", { owner: "Lobbi-Group" });
     expect(result.merged).toBe(false);
     expect(fetchCalls).toHaveLength(0);
   });
@@ -133,13 +133,13 @@ describe("commentOnPullRequest", () => {
     const result = await commentOnPullRequest(
       db,
       "company-1",
-      { owner: "jkrums", repo: "lobbi", prNumber: 42 },
+      { owner: "Lobbi-Group", repo: "lobbi", prNumber: 42 },
       "Merge rejected: please split into two PRs.",
     );
 
     expect(result.posted).toBe(true);
     expect(fetchCalls[0]!.url).toBe(
-      "https://api.github.com/repos/jkrums/lobbi/issues/42/comments",
+      "https://api.github.com/repos/Lobbi-Group/lobbi/issues/42/comments",
     );
     expect(fetchCalls[0]!.init?.method).toBe("POST");
     const body = JSON.parse(String(fetchCalls[0]!.init?.body ?? "{}"));
