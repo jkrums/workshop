@@ -1,7 +1,9 @@
 import type { UIAdapterModule } from "./types";
+import { acpxLocalUIAdapter } from "./acpx-local";
 import { claudeLocalUIAdapter } from "./claude-local";
 import { claudeRemoteUIAdapter } from "./claude-remote";
 import { codexLocalUIAdapter } from "./codex-local";
+import { cursorCloudUIAdapter } from "./cursor-cloud";
 import { cursorLocalUIAdapter } from "./cursor";
 import { geminiLocalUIAdapter } from "./gemini-local";
 import { openCodeLocalUIAdapter } from "./opencode-local";
@@ -50,9 +52,11 @@ setDynamicParserResultNotifier(notifyAdapterChange);
 
 function registerBuiltInUIAdapters() {
   for (const adapter of [
+    acpxLocalUIAdapter,
     claudeLocalUIAdapter,
     claudeRemoteUIAdapter,
     codexLocalUIAdapter,
+    cursorCloudUIAdapter,
     geminiLocalUIAdapter,
     hermesLocalUIAdapter,
     openCodeLocalUIAdapter,
