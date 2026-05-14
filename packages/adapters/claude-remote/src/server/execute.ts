@@ -203,6 +203,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     ...(process.env.TELEGRAM_CHAT_ID
       ? { TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID }
       : {}),
+    ...(process.env.GITHUB_TOKEN
+      ? { GITHUB_TOKEN: process.env.GITHUB_TOKEN }
+      : {}),
     ...(cfg.extraArgs.length > 0
       ? { PAPERCLIP_WORKER_EXTRA_ARGS: JSON.stringify(cfg.extraArgs) }
       : {}),
