@@ -4,6 +4,13 @@ primary_region = "iad"
 # Worker image host. Machines are spawned on demand by the control plane via
 # the Fly Machines API and auto-destroy when they exit. There are no always-on
 # machines in this app — `flyctl deploy` only updates the image.
+#
+# Deploy from this directory (worker/):
+#   cd worker
+#   node build-mcp.mjs            # bundles MCP server + copies ../skills/ into ./skills/
+#   flyctl deploy --ha=false      # builds with context = ./
+# build-mcp.mjs syncs ../skills/ into ./skills/ so the Dockerfile can COPY
+# it without needing repo-root context (./skills/ is gitignored).
 [build]
   dockerfile = "Dockerfile"
 
