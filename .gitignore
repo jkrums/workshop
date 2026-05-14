@@ -56,3 +56,6 @@ tests/release-smoke/test-results/
 tests/release-smoke/playwright-report/
 .superset/
 .claude/worktrees/
+
+# worker/skills/ is synced from ../skills/ by worker/build-mcp.mjs
+worker/skills/
