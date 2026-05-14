@@ -1745,7 +1745,14 @@ export function agentRoutes(
     const recoveryActionsSvc = issueRecoveryActionService(db);
     const rows = await issuesSvc.list(req.actor.companyId, {
       assigneeAgentId: req.actor.agentId,
-      status: "todo,in_progress,blocked",
+      // `in_review` is included so an agent that posted a request_confirmation
+      // (continuationPolicy=wake_assignee) and was woken when the user accepted
+      // sees its own pending issue back. Without this, the wake fires with the
+      // right issueId in the context snapshot, but the agent's discovery path
+      // (paperclipInboxLite) shows `[]` and the agent stands down with
+      // "no actionable work" — exactly what LOB-23 hit on 2026-05-14.
+      // Matches the status set documented in onboarding-assets/ceo/HEARTBEAT.md.
+      status: "todo,in_progress,in_review,blocked",
       includeRoutineExecutions: true,
       limit: ISSUE_LIST_DEFAULT_LIMIT,
     });
