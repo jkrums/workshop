@@ -17,11 +17,33 @@
 
 import { spawn } from "node:child_process";
 
-function req(name) {
+async function failFast(message) {
+  // The adapter polls /worker-callbacks/:runId/status until either /complete
+  // arrives or its timeoutSec expires. If the shim just process.exit()s, the
+  // adapter has no signal and burns the full polling window (10+ min). When
+  // we can identify a fatal-before-claude condition, post a synthetic
+  // completion so the adapter returns immediately and the recovery loop sees
+  // a real error instead of an opaque timeout.
+  console.error(`[shim] ${message}`);
+  const callbackUrl = process.env.PAPERCLIP_CALLBACK_URL;
+  const apiKey = process.env.PAPERCLIP_API_KEY;
+  if (callbackUrl && apiKey) {
+    await postCallback(callbackUrl, apiKey, {
+      exitCode: 2,
+      signal: null,
+      timedOut: false,
+      stdout: "",
+      stderr: message,
+      errorMessage: message,
+    }).catch(() => {});
+  }
+  process.exit(2);
+}
+
+async function req(name) {
   const v = process.env[name];
   if (!v || !v.trim()) {
-    console.error(`[shim] missing required env ${name}`);
-    process.exit(2);
+    await failFast(`missing required env ${name}`);
   }
   return v;
 }
@@ -63,10 +85,12 @@ async function postCallback(callbackUrl, apiKey, payload) {
 }
 
 async function main() {
-  const prompt = req("PAPERCLIP_WORKER_PROMPT");
-  req("ANTHROPIC_API_KEY");
-  const callbackUrl = req("PAPERCLIP_CALLBACK_URL");
-  const apiKey = req("PAPERCLIP_API_KEY");
+  // Resolve callback URL + API key first so failFast can phone home if any of
+  // the other required envs are missing.
+  const callbackUrl = await req("PAPERCLIP_CALLBACK_URL");
+  const apiKey = await req("PAPERCLIP_API_KEY");
+  const prompt = await req("PAPERCLIP_WORKER_PROMPT");
+  await req("ANTHROPIC_API_KEY");
   const runId = process.env.PAPERCLIP_RUN_ID ?? "(no run id)";
   const model = process.env.PAPERCLIP_WORKER_MODEL?.trim();
   const extraArgs = parseArgs();

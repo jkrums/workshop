@@ -185,6 +185,26 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const prompt = buildPrompt(ctx);
 
+  // Guard: spawning a worker with an empty prompt wastes ~10 minutes of polling
+  // because the shim exits before it can post a /complete callback. The only
+  // signal the control plane gets back is a timeout, which then drives the
+  // recovery loop into a retry-storm against the same broken config.
+  //
+  // Most commonly this fires when adapterConfig.promptTemplate references a
+  // context field that's empty for this run (e.g. an `on_demand` manual wake
+  // with no assigned issue). Fail fast with a clear error so the misconfig
+  // surfaces in the UI immediately.
+  if (!prompt || prompt.trim().length === 0) {
+    return {
+      exitCode: null,
+      signal: null,
+      timedOut: false,
+      errorMessage:
+        "claude_remote: rendered prompt is empty — agent promptTemplate likely references a context field that is missing for this run (e.g. manual on_demand wake with no issue). Spawn skipped.",
+      errorCode: "empty_prompt",
+    };
+  }
+
   const workerEnv: Record<string, string> = {
     ...buildPaperclipEnv(agent),
     // Override PAPERCLIP_API_URL so any Paperclip SDK / MCP tooling inside the
