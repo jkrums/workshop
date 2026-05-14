@@ -341,4 +341,49 @@ describe("paperclip MCP tools", () => {
 
     expect(response.content[0]?.text).toContain("must not contain '..'");
   });
+
+  it("accepts generic request paths relative to /api", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({ id: "agent-22" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tool = getTool("paperclipApiRequest");
+    await tool.execute({ method: "GET", path: "/agents/me" });
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(String(url)).toBe("http://localhost:3100/api/agents/me");
+  });
+
+  it("accepts generic request paths that already include the /api prefix (matches curl URLs in skill docs)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({ id: "agent-22" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tool = getTool("paperclipApiRequest");
+    // Skill docs (paperclip-create-agent/SKILL.md) show curl URLs as
+    // `$PAPERCLIP_API_URL/api/agents/me`, so agents naturally call the MCP
+    // wrapper with `/api/agents/me`. Without normalization that produces
+    // `https://host/api/api/agents/me` and 404s — even though curl works.
+    await tool.execute({ method: "GET", path: "/api/agents/me" });
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(String(url)).toBe("http://localhost:3100/api/agents/me");
+  });
+
+  it("accepts company-scoped /api paths without doubling the prefix", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockJsonResponse({}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const tool = getTool("paperclipApiRequest");
+    await tool.execute({
+      method: "POST",
+      path: "/api/companies/11111111-1111-1111-1111-111111111111/agent-hires",
+      jsonBody: JSON.stringify({ role: "growth" }),
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toBe(
+      "http://localhost:3100/api/companies/11111111-1111-1111-1111-111111111111/agent-hires",
+    );
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({ role: "growth" });
+  });
 });

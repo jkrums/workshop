@@ -80,7 +80,21 @@ export class PaperclipApiClient {
       throw new Error(`API path must start with "/": ${path}`);
     }
 
-    const url = new URL(path.slice(1), `${this.config.apiUrl}/`);
+    // `apiUrl` is normalized in config.ts to always end with `/api`. The skill
+    // docs (e.g. paperclip-create-agent/SKILL.md) show routes as
+    // `$PAPERCLIP_API_URL/api/agents/me`, so callers naturally pass paths in
+    // either form: "/agents/me" (relative to /api) or "/api/agents/me"
+    // (absolute under /api). Without normalization the absolute form gets a
+    // doubled prefix — "https://host/api/api/agents/me" → 404 — even though
+    // the same URL works via curl. Accept both forms so the MCP wrapper
+    // matches the documented routes.
+    const normalizedPath = path === "/api"
+      ? "/"
+      : path.startsWith("/api/")
+        ? path.slice("/api".length)
+        : path;
+
+    const url = new URL(normalizedPath.slice(1), `${this.config.apiUrl}/`);
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.config.apiKey}`,
       Accept: "application/json",
